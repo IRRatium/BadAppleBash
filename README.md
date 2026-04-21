@@ -24,7 +24,7 @@ git clone https://github.com/IRRatium/BadAppleBash
 
 02. Navigate to the project directory:
 ```bash
-cd YOUR_REPO_NAME
+cd BadAppleBash
 ```
 
 03. Make the `run.sh` script executable:
