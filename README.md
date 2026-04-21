@@ -41,6 +41,6 @@ chmod +x run.sh
 
 ## Credits
 
-This project is a fork of [FelipeFMA/BadAppleBash](https://github.com/FelipeFMA/BadAppleBash), which in turn was originally forked from[trung-kieen/bad-apple-ascii](https://github.com/trung-kieen/bad-apple-ascii). 
+This project is a fork of [FelipeFMA/BadAppleBash](https://github.com/FelipeFMA/BadAppleBash), which in turn was originally forked from [trung-kieen/bad-apple-ascii](https://github.com/trung-kieen/bad-apple-ascii). 
 
 Special thanks to the original creators for extracting the frames and writing the initial scripts!
