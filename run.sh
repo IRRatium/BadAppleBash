@@ -1,8 +1,7 @@
 #!/bin/bash
 # Original code: Nguyen Khac Trung Kien
 # Fork by: Felipe Avelar
-# Description: Plays ASCII animation of Bad Apple!! with optional audio
-# Usage: ./run.sh [-h|--help]
+# Python Perfect Sync + Centered Video Mod
 
 # Exit on error
 set -e
@@ -10,49 +9,14 @@ set -e
 # Set script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-# Function to display usage information
-usage() {
-    echo
-    echo "Usage: $0"
-    echo "  -h, --help  Display this help message"
-    echo
-    exit 0
-}
-
-# Check for help flag
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    usage
-fi
-
-echo
-
-# Ask for mpv audio playback
-read -p "Do you want to use mpv to play sound? You need mpv installed to do that. (y/n): " choice
-
-# Validate user input
-if [[ ! $choice =~ ^[YyNn]$ ]]; then
-    echo "Invalid input. Please enter 'y' or 'n'."
+# Check if mpv is installed
+if ! command -v mpv &> /dev/null; then
+    echo "Ошибка: mpv не установлен. Установите его для звука."
     exit 1
 fi
 
-# Handle mpv audio playback
-if [[ $choice =~ ^[Yy]$ ]]; then
-    # Check if mpv is installed
-    if ! command -v mpv &> /dev/null; then
-        echo
-        echo "mpv is not installed. Please install it to use this feature."
-        echo
-        exit 1
-    fi
-    
-    # Play audio in background
-    mpv "${SCRIPT_DIR}/bad_apple.mp3" > /dev/null 2>&1 &
-fi
-
-echo
-
-# Set frames directory
-FRAMES_DIR="${SCRIPT_DIR}/frames-ascii"
+# Set frames directory and export it for Python
+export FRAMES_DIR="${SCRIPT_DIR}/frames-ascii"
 
 # Validate frames directory
 if [[ ! -d "$FRAMES_DIR" ]]; then
@@ -60,27 +24,72 @@ if [[ ! -d "$FRAMES_DIR" ]]; then
     exit 1
 fi
 
-# Clear screen
+# Очищаем экран и скрываем курсор
 printf "\033c"
+tput civis
 
-# Play animation
-for filename in $(ls -v "$FRAMES_DIR"); do
-    # Move cursor to top-left
-    tput cup 0 0
-    
-    # Construct full file path
-    file="${FRAMES_DIR}/$filename"
-    
-    # Validate file existence
-    if [[ -f "$file" ]]; then
-        # Display frame
-        cat "$file"
-    fi
-    
-    # Wait for next frame
-    sleep 0.024
+# Запускаем музыку
+mpv "${SCRIPT_DIR}/bad_apple.mp3" > /dev/null 2>&1 &
+MPV_PID=$!
 
-done
+# При закрытии (Ctrl+C) убиваем mpv, возвращаем курсор и очищаем экран
+trap 'tput cnorm; kill $MPV_PID 2>/dev/null || true; printf "\033c"' EXIT INT TERM
 
-# Exit with success
-exit 0
+# Запускаем Python с центрированием
+python3 << 'EOF'
+import os, sys, time, shutil
+
+frames_dir = os.environ.get('FRAMES_DIR')
+
+# Собираем и сортируем кадры
+frames = sorted([f for f in os.listdir(frames_dir) if os.path.isfile(os.path.join(frames_dir, f))],
+    key=lambda x: int("".join(filter(str.isdigit, x)) or 0)
+)
+
+if not frames:
+    sys.exit("Error: No frames found.")
+
+fps = 30.0 
+
+# Читаем первый кадр, чтобы понять его размеры (ширину и высоту ASCII-арта)
+with open(os.path.join(frames_dir, frames[0]), "r", encoding="utf-8") as f:
+    first_frame_lines = f.read().splitlines()
+    frame_height = len(first_frame_lines)
+    frame_width = max(len(line) for line in first_frame_lines) if first_frame_lines else 0
+
+start_time = time.time()
+
+for i, filename in enumerate(frames):
+    filepath = os.path.join(frames_dir, filename)
+    with open(filepath, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    
+    # Получаем ТЕКУЩИЙ размер терминала (адаптируется к изменению размера окна)
+    term_cols, term_lines = shutil.get_terminal_size()
+    
+    # Вычисляем отступы для центрирования
+    pad_y = max(0, (term_lines - frame_height) // 2)
+    pad_x = max(0, (term_cols - frame_width) // 2)
+    
+    # Собираем итоговую строку для вывода
+    # \033[H - курсор в начало
+    out = '\033[H' + ('\n' * pad_y) 
+    
+    left_spaces = ' ' * pad_x
+    for line in lines:
+        # \033[K стирает хвост строки (предотвращает мусор, если окно расширили)
+        out += left_spaces + line + '\033[K\n'
+        
+    # \033[J стирает всё, что осталось ниже видео (чтобы не было дублей)
+    out += '\033[J'
+    
+    # Идеальная синхронизация
+    expected_time = start_time + (i / fps)
+    current_time = time.time()
+    
+    if expected_time > current_time:
+        time.sleep(expected_time - current_time)
+        
+    sys.stdout.write(out)
+    sys.stdout.flush()
+EOF
